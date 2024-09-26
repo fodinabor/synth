@@ -79,12 +79,16 @@ def solve_external_smt2(debug, goal, get_cmd, theory='ALL'):
         # this would be great, if it did not leak internal z3 operators to the smt2 output
         # for b in t(simplify(a)):
         #   s.add(b)
-        s.add(a)
+        for b in t(simplify(a)):
+            s.add(b)
     
     smt2_string = s.to_smt2()
 
-    # replace empty and statements
-    smt2_string = smt2_string.replace("and)", "(and true))")
+    # replace internal z3 operators with smt2 operators
+    smt2_string = smt2_string.replace("bvudiv_i", "bvudiv")
+    smt2_string = smt2_string.replace("bvurem_i", "bvurem")
+    smt2_string = smt2_string.replace("bvsdiv_i", "bvsdiv")
+    smt2_string = smt2_string.replace("bvsrem_i", "bvsrem")
 
 
     bench = f'(set-option :produce-models true)\n(set-logic {theory})\n' + smt2_string + "\n(get-model)"
@@ -150,7 +154,7 @@ def solve_external_z3(debug, goal, theory='ALL'):
 class SynthN:
     def __init__(self, spec: Spec, ops: list[Func], n_insns, \
         debug=no_debug, max_const=None, const_set=None, \
-        output_prefix=None, timeout=None, theory=None, solve=solve_z3, bitvec_encoding=True, \
+        output_prefix=None, timeout=None, theory=None, solve=solve_external_bitwuzla, bitvec_encoding=True, \
         opt_no_dead_code=True, opt_no_cse=True, opt_const=True, \
         opt_commutative=True, opt_insn_order=True):
 
