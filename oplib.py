@@ -60,6 +60,7 @@ class Bv:
             Func('ult',  If(ULT(x, y), o, z)),
             Func('sge',  If(x >= y, o, z)),
             Func('slt',  If(x < y, o, z)),
+            Func('eq',   If(x == y, o, z)),
             Func('mul',  x * y),
             Func('div',  x / y),
             Func('udiv', UDiv(x, y), precond=div_precond),
