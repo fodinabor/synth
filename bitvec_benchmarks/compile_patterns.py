@@ -88,9 +88,9 @@ class BvBench(TestBase):
         elif opcode == "icmpugt":
             return If(UGT(args[0], args[1]), self.one, self.zero)
         elif opcode == "icmpule":
-            return If(ULE(args[0] <= args[1]), self.one, self.zero)
+            return If(ULE(args[0], args[1]), self.one, self.zero)
         elif opcode == "icmpuge":
-            return If(UGE(args[0] >= args[1]), self.one, self.zero)
+            return If(UGE(args[0], args[1]), self.one, self.zero)
         elif opcode == "icmpslt":
             return If(args[0] < args[1], self.one, self.zero)
         elif opcode == "icmpsgt":
