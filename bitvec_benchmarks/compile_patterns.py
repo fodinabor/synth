@@ -50,8 +50,9 @@ class BvBench(TestBase):
 
         self.patterns = patterns
 
+        num_zeros = int(math.ceil(math.log10(len(self.patterns))))
         for i in range(len(self.patterns)):
-            setattr(self, f"test_p{i}", lambda: self.synth_px(i))
+            setattr(self, f"test_p{str(i).zfill(num_zeros)}", lambda i=i: self.synth_px(i))
 
     def get_op(self, opcode, *args):
         if opcode == "add":
