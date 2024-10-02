@@ -17,21 +17,26 @@ if [ ! -z $2 ]; then
     cores=$2
 fi
 
+trap 'jobs -p | xargs -I{} kill -- {}; echo "killed jobs"; exit' INT
+
 echo "Compiling patterns"
 
 for i in $(echo $test | sed "s/,/ /g")
 do
-    python3 bitvec_benchmarks/compile_patterns.py patterns -t $i |& tee $i.out &
+    # python3 bitvec_benchmarks/compile_patterns.py patterns -t $i |& tee $i.out &
+    sleep 10000 &
     c=$((c+1))
     t=$((t+1))
-    if [ $c -eq cores ]; then
+    if [ $c -eq $cores ]; then
         wait
         c=0
     fi
-    if [ $t -eq lim ]; then
+    if [ $t -eq $lim ]; then
         wait
         break
     fi
 done
+
+wait
 
 echo "Done"
