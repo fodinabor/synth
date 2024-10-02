@@ -168,11 +168,11 @@ if __name__ == '__main__':
     def load_yaml(path):
         with open(path, 'r') as f:
             yml = yaml.load_all(f, Loader = Loader)
-            print(next(yml))
+            print(next(yml), file=sys.stderr)
             patterns = []
             for doc in yml:
                 patterns.append(doc)
-            print(f"loaded {path}")
+            print(f"loaded {path}", file=sys.stderr)
         return patterns
     with mp.Pool() as pool:
         workers = len(mp.active_children())
