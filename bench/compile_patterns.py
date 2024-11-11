@@ -1,33 +1,55 @@
 #! /usr/bin/env python3
-
-import os, sys
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import math
 
+from dataclasses import dataclass
+
 from z3 import *
-from cegis import *
-from oplib import Bv
-from test_base import TestBase, parse_standard_args
+
+from synth.spec import Func, Spec
+from synth.oplib import Bv
+
+from bench.util import BitVecBenchSet
 
 import yaml
 try:
     from yaml import CSafeLoader as Loader
 except ImportError:
     from yaml import Loader
+
 from collections import defaultdict
 import multiprocessing as mp
 
-def chunks(lst, n):
-  """Yield successive n-sized chunks from lst."""
-  for i in range(0, len(lst), n):
-      yield lst[i:i + n]
+def load_yaml(path):
+    with open(path, 'r') as f:
+        yml = yaml.load_all(f, Loader=Loader)
+        print(next(yml), file=sys.stderr)
+        patterns = []
+        for doc in yml:
+            patterns.append(doc)
+        print(f"loaded {path}", file=sys.stderr)
+    return patterns
 
-class BvBench(TestBase):
-    def __init__(self, width, patterns, args):
-        super().__init__(**vars(args))
-        self.width = width
-        self.bv    = Bv(width)
+def load_patterns(path):
+    files = []
+    for file in os.scandir(path): # do we have any relevant json file here?
+        if os.path.isfile(file.path) and file.path.endswith(".yml"):
+            files.append(file.path)
+
+    with mp.Pool() as pool:
+        workers = len(mp.active_children())
+        patterns_lists = pool.imap(load_yaml, files, (len(files) + workers - 1) // workers)
+        patterns = []
+        for pttrns in patterns_lists:
+            patterns.extend(pttrns)
+    return patterns
+
+
+@dataclass
+class ComPileBench(BitVecBenchSet):
+    def __init__(self, pattern_path = "patterns", bit_width: int = 8):
+        super().__init__(bit_width)
+        patterns = load_patterns(pattern_path)
+        self.bv    = Bv(bit_width)
         self.ops = [
             self.bv.add_,
             self.bv.sub_,
@@ -104,30 +126,6 @@ class BvBench(TestBase):
         else:
             raise ValueError(f"unknown opcode {opcode}")
         
-    def do_synth(self, name, spec, ops, consts={}, desc='', **args):
-        return super().do_synth(name, spec, ops, self.ops, consts, desc, \
-                                theory='QF_BV', **args)
-
-    def const(self, n):
-        return BitVecVal(n, self.width)
-
-    def popcount(self, x):
-        res = BitVecVal(0, self.width)
-        for i in range(self.width):
-            res = ZeroExt(self.width - 1, Extract(i, i, x)) + res
-        return res
-
-    def nlz(self, x):
-        w   = self.width
-        res = BitVecVal(w, w)
-        for i in range(w - 1):
-            res = If(And([ Extract(i, i, x) == 1,
-                     Extract(w - 1, i + 1, x) == BitVecVal(0, w - 1 - i) ]), w - 1 - i, res)
-        return If(Extract(w - 1, w - 1, x) == 1, 0, res)
-
-    def is_power_of_two(self, x):
-        return self.popcount(x) == 1
-
     def synth_px(self, x):
         pattern = self.patterns[x]
         insts = []
@@ -148,38 +146,5 @@ class BvBench(TestBase):
         print(spec)
         # ops = { self.bv.and_: 1, self.bv.sub_: 1, self.bv.xor_: 1, self.bv.add_: 1, self.bv.ult_: 1, self.bv.uge_: 1, self.bv.shl : 1, self.bv.lshr_: 1 }
         consts = { self.one: 1, self.zero: 1 }
-        return self.do_synth('p'+str(x), spec, self.ops, consts, desc='Pattern!')
+        return self.create_bench('p'+str(x), spec, self.ops, consts, desc='Pattern!')
 
-
-if __name__ == '__main__':
-    import argparse
-    synth_args, rest = parse_standard_args()
-    parser = argparse.ArgumentParser(prog="compile_patterns")
-    parser.add_argument('-b', '--width', type=int, default=8)
-    parser.add_argument("patterns", type=str, default="patterns", help="path to the patterns")
-    args = parser.parse_args(rest)
-
-    path = args.patterns
-    files = []
-    for file in os.scandir(path): # do we have any relevant json file here?
-        if os.path.isfile(file.path) and file.path.endswith(".yml"):
-            files.append(file.path)
-    
-    def load_yaml(path):
-        with open(path, 'r') as f:
-            yml = yaml.load_all(f, Loader = Loader)
-            print(next(yml), file=sys.stderr)
-            patterns = []
-            for doc in yml:
-                patterns.append(doc)
-            print(f"loaded {path}", file=sys.stderr)
-        return patterns
-    with mp.Pool() as pool:
-        workers = len(mp.active_children())
-        patterns_lists = pool.imap(load_yaml, files, (len(files) + workers - 1) // workers)
-        patterns = []
-        for pttrns in patterns_lists:
-            patterns.extend(pttrns)
-
-    t = BvBench(args.width, patterns, synth_args)
-    t.run()

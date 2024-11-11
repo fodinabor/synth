@@ -1,16 +1,20 @@
 #! /usr/bin/env python3
+from dataclasses import dataclass
+from typing import Optional, List
 
-import importlib
+import pathlib
 
 from z3 import *
+import tyro
 
-from cegis import Spec, Func, OpFreq
-from oplib import Bl
-from test_base import create_bool_func
+from synth.oplib import Bl
+from synth import SYNTHS, spec
+from synth.spec import Spec, Task, create_bool_func
+from synth.synth_n import LenCegis
 
 def read_pla(file, name='func', outputs=None, debug=0):
     for n, line in enumerate(file):
-        line = line.strip()
+        line = line.strip().split('#')[0]
         if (have_o := line.startswith(".o ")) or line.startswith(".ob "):
             if have_o:
                 num_outs = int(line.split()[1])
@@ -82,73 +86,79 @@ def read_pla(file, name='func', outputs=None, debug=0):
     outs = [ o for i, o in enumerate(outs) if i in outputs ]
     return Spec(name, spec, outs, ins, precond=precond)
 
+_avail_ops = { name: op for name, op in vars(Bl).items() if isinstance(op, spec.Func) }
+_avail_ops_names = ', '.join(_avail_ops.keys())
+_default_ops = 'not1,and2,or2,xor2'
+
+@dataclass(frozen=True)
+class File:
+    """Read boolean functions from a file, one per line."""
+    file: pathlib.Path
+    """The file."""
+
+    def get_functions(self):
+        with open(self.file, 'r') as f:
+            return [ create_bool_func(line.strip()) for line in f.readlines() ]
+
+@dataclass(frozen=True)
+class Pla:
+    """Read a espresso pla description from a file."""
+    file: pathlib.Path
+    """The file."""
+    outs: Optional[str] = None
+    """Output variables to consider."""
+    debug: bool = False
+    """Enable diagnostic output."""
+
+    def get_functions(self):
+        outputs = set(int(i) for i in args.outs.split(',')) if self.outs else None
+        with open(self.file, 'r') as f:
+            return [ read_pla(f, name=str(self.file),
+                              outputs=outputs, debug=self.debug) ]
+
+@dataclass(frozen=True)
+class Func:
+    """Specify boolean function to synthesize on the command line"""
+    func: str
+
+    def get_functions(self):
+        return [ create_bool_func(self.func) ]
+
+@dataclass(frozen=True)
+class Settings:
+    op: File | Pla | Func
+    synth: SYNTHS = LenCegis()
+
+    consts: int = 1
+    """The maximum number of constants allowed."""
+
+    ops: str = _default_ops
+    """The operators to synthesize with."""
+
+    stats: bool = False
+    """Dump statistics about synthesis to a JSON file."""
+
+    graph: bool = False
+    """Dump a .dot graph of the synthesized function."""
+
 if __name__ == "__main__":
-    avail_ops = { name: op for name, op in vars(Bl).items() if isinstance(op, Func) }
-    avail_ops_names = ', '.join(avail_ops.keys())
-    default_ops = 'not1,and2,or2,xor2'
+    args = tyro.cli(Settings)
+    functions = args.op.get_functions()
 
-    import argparse
-    parser = argparse.ArgumentParser(prog="synth_pla")
-    parser.add_argument('-d', '--debug', type=int, default=0, help='debug level')
-    parser.add_argument('-c', '--const', type=int, default=1, help='max number of constants')
-    parser.add_argument('-l', '--minlen', type=int, default=0, help='min program length')
-    parser.add_argument('-L', '--maxlen', type=int, default=10, help='max program length')
-    parser.add_argument('-e', '--samples', type=int, default=None, help='initial samples')
-    parser.add_argument('-p', '--ops',   type=str, default=default_ops, \
-                        help=f'comma-separated list of operators ({avail_ops_names})')
-    parser.add_argument('-w', '--write', default=False, action='store_true', \
-                        help='dump the individual SMT queries to files')
-    parser.add_argument('-t', '--stats', default=False, action='store_true', \
-                        help='write stats to a JSON file')
-    parser.add_argument('-g', '--graph', default=False, action='store_true', \
-                        help='write the program graph to a DOT file')
-    parser.add_argument('-f', '--file', default=None, action='store', \
-                        help='read boolean functions from a file (one per line)')
-    parser.add_argument('-a', '--pla', default=None, action='store', \
-                        help='read boolean function from a pla file')
-    parser.add_argument('-o', '--outs',  type=str, action='store', \
-                        help='comma-separated list output variables in pla file to consider')
-    parser.add_argument('-s', '--synth',  type=str, action='store', default='synth_fa', \
-                        help='module of synthesizer (default: synth_fa)')
-    parser.add_argument('functions', nargs=argparse.REMAINDER, \
-                        help='boolean function as a hex number (possibly multiple))')
-    args = parser.parse_args()
-
-    def debug(level, *a):
-        if args.debug >= level:
-            print(*a)
-
-    functions = []
-    if len(args.functions) > 0:
-        functions += [ create_bool_func(f) for f in args.functions ]
-    elif not args.file is None:
-        with open(args.file, 'r') as f:
-            functions += [ create_bool_func(line.strip()) for line in f.readlines() ]
-    elif args.pla:
-        outputs = set(int(i) for i in args.outs.split(',')) if args.outs else None
-        with open(args.pla, 'r') as f:
-            functions += [ read_pla(f, name=args.pla, outputs=outputs, debug=args.debug) ]
-    else:
-        parser.print_help()
-        exit(1)
-
-    # select operators
-    ops = { avail_ops[name]: OpFreq.MAX for name in args.ops.split(',') if name in avail_ops }
-    debug(1, f'using operators:', ', '.join([ str(op) for op in ops ]))
-
-    # get the synthesis function
-    m = importlib.import_module(args.synth)
-    synth = getattr(m, 'synth')
+    ops = { }
+    for name in args.ops.split(','):
+        match name.split(':'):
+            case [name]:
+                ops[_avail_ops[name]] = None
+            case [name, freq]:
+                ops[_avail_ops[name]] = int(freq)
 
     next = ''
     for spec in functions:
         func = spec.name
         print(f'{next}{func}:')
-        n_samples = args.samples if args.samples else min(32, 2 ** len(spec.inputs))
-        prg, stats = synth(spec, ops, range(args.minlen, args.maxlen + 1), \
-                           debug=debug, max_const=args.const, \
-                           n_samples=n_samples, \
-                           output_prefix=f'{func}' if args.write else None)
+        task = Task(spec, ops, args.consts, None, 'QF_BV')
+        prg, stats = args.synth.synth(task)
         print(prg)
         total_time = sum(s['time'] for s in stats)
         print(f'synthesis time: {total_time / 1e9:.3f}s')
