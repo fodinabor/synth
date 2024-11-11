@@ -1,6 +1,8 @@
 #!/bin/bash
 
-cd $SUBMIT_PWD
+if [ ! -z $SUBMIT_PWD ]; then
+    cd $SUBMIT_PWD
+fi
 
 python3 -m venv .venv
 source .venv/bin/activate
@@ -30,7 +32,7 @@ fi
 
 trap 'jobs -p | xargs -I{} kill -- {}; echo "killed jobs"; exit' INT
 
-echo "Compiling patterns"
+echo "Synthesizing patterns"
 
 mkdir -p output
 
