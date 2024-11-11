@@ -186,7 +186,7 @@ class List:
     def exec(self):
         for name in dir(self.set):
             if name.startswith('test_'):
-                print(name)
+                print(name[len('test_'):])
 
 def foo():
     pass

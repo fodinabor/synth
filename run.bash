@@ -6,7 +6,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 
-test=$(python3 bitvec_benchmarks/compile_patterns.py patterns -T)
+test=$(python3 benchmark.py list set:com-pile-bench)
 
 c=0
 cores=16
@@ -36,7 +36,7 @@ mkdir -p output
 
 for i in $(echo $test | sed "s/,/ /g")
 do
-    python3 bitvec_benchmarks/compile_patterns.py patterns -t $i |& tee output/$i.out &
+    python3 benchmark.py run --tests=$i set:com-pile-bench synth:len-cegis |& tee output/$i.out &
     c=$((c+1))
     t=$((t+1))
     if [ $c -eq $cores ]; then
