@@ -18,6 +18,11 @@ if [ ! -z $1 ]; then
     lim=$1
 fi
 
+# if $OMP_NUM_THREADS not empty, use as number of cores
+if [ ! -z $OMP_NUM_THREADS ]; then
+    cores=$OMP_NUM_THREADS
+fi
+
 # if $2 not empty, use as number of cores
 if [ ! -z $2 ]; then
     cores=$2

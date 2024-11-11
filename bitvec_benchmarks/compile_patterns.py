@@ -154,7 +154,7 @@ class BvBench(TestBase):
 if __name__ == '__main__':
     import argparse
     synth_args, rest = parse_standard_args()
-    parser = argparse.ArgumentParser(prog="hackdel")
+    parser = argparse.ArgumentParser(prog="compile_patterns")
     parser.add_argument('-b', '--width', type=int, default=8)
     parser.add_argument("patterns", type=str, default="patterns", help="path to the patterns")
     args = parser.parse_args(rest)
