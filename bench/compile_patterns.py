@@ -46,9 +46,12 @@ def load_patterns(path):
 
 @dataclass
 class ComPileBench(BitVecBenchSet):
-    def __init__(self, pattern_path = "patterns", bit_width: int = 8):
+    pattern_dir: str = "patterns"
+
+    def __init__(self, pattern_dir="patterns", bit_width: int = 8):
         super().__init__(bit_width)
-        patterns = load_patterns(pattern_path)
+        self.pattern_dir = pattern_dir
+        patterns = load_patterns(self.pattern_dir)
         self.bv    = Bv(bit_width)
         self.ops = [
             self.bv.add_,
